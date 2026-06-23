@@ -13,11 +13,16 @@ import com.example.ecommerceapplication.repository.ProductRepository;
 import com.example.ecommerceapplication.repository.UserRepository;
 import com.example.ecommerceapplication.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -27,7 +32,9 @@ public class OrderServiceImpl implements OrderService {
     private final ProductRepository productRepository;
 
     @Override
-    public void placeOrder(OrderRequest request) {
+    @Transactional
+    public OrderDTO placeOrder(OrderRequest request) {
+        log.info("Placing order for user id: {}", request.getUserId());
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getUserId()));
 
@@ -43,26 +50,32 @@ public class OrderServiceImpl implements OrderService {
                 .status(OrderStatus.PENDING)
                 .build();
 
-        orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
+        return mapToDTO(savedOrder);
     }
 
     @Override
-    public List<OrderDTO> getAllOrders() {
-        return orderRepository.findAll().stream().map(this::mapToDTO).collect(Collectors.toList());
+    public Page<OrderDTO> getAllOrders(Pageable pageable) {
+        log.info("Fetching all orders with pagination");
+        return orderRepository.findAll(pageable).map(this::mapToDTO);
     }
 
     @Override
-    public List<OrderDTO> getOrdersByUserId(Long userId) {
-        return orderRepository.findByUserId(userId).stream().map(this::mapToDTO).collect(Collectors.toList());
+    public Page<OrderDTO> getOrdersByUserId(Long userId, Pageable pageable) {
+        log.info("Fetching orders for user id: {}", userId);
+        return orderRepository.findByUserId(userId, pageable).map(this::mapToDTO);
     }
 
     @Override
-    public void cancelOrder(Long orderId) {
+    @Transactional
+    public OrderDTO cancelOrder(Long orderId) {
+        log.info("Cancelling order id: {}", orderId);
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
 
         order.setStatus(OrderStatus.CANCELLED);
-        orderRepository.save(order);
+        Order updatedOrder = orderRepository.save(order);
+        return mapToDTO(updatedOrder);
     }
 
     private OrderDTO mapToDTO(Order order) {
